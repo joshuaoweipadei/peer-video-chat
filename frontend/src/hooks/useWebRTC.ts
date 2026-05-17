@@ -3,7 +3,18 @@ import AgoraRTM from 'agora-rtm-sdk'
 import type { RTMClient, RTMEvents } from 'agora-rtm-sdk'
 import type { UseWebRTCProps, UseWebRTCReturn } from '../types'
 
-const BACKEND_URL = import.meta.env['VITE_BACKEND_URL'] as string
+const APP_ID: string = import.meta.env.VITE_AGORA_APP_ID
+const BACKEND_URL: string = import.meta.env['VITE_BACKEND_URL'] as string
+
+// Stable session UID (generated once at module load, never during render)
+function generateUid(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `user_${crypto.randomUUID().slice(0, 8)}`
+  }
+  return `user_${String(Date.now()).slice(-6)}`
+}
+
+const SESSION_UID = generateUid()
 
 async function fetchRtmToken(uid: string): Promise<string> {
   const res = await fetch(
@@ -35,8 +46,8 @@ async function fetchRtmToken(uid: string): Promise<string> {
 // dedicated signaling channel that both peers subscribe to.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const APP_ID: string =
-  (import.meta.env['VITE_AGORA_APP_ID'] as string | undefined) ?? 'YOUR-APP-ID'
+// const APP_ID: string =
+//   (import.meta.env['VITE_AGORA_APP_ID'] as string | undefined) ?? 'YOUR-APP-ID'
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
@@ -81,7 +92,8 @@ export function useWebRTC({
   const remoteStreamRef   = useRef<MediaStream | null>(null)
 
   // Stable UID for this session — used as userId in v2 constructor
-  const uid = useRef<string>(`user_${Math.floor(Math.random() * 10000)}`).current
+  // const uid = useRef<string>(`user_${Math.floor(Math.random() * 10000)}`).current
+  const uid = useRef<string>(SESSION_UID).current
 
   // ── Publish a signal to the shared room channel ───────────────────────────
   const publish = useCallback(async (signal: Signal): Promise<void> => {
