@@ -3,6 +3,17 @@ import AgoraRTM from 'agora-rtm-sdk'
 import type { RTMClient, RTMEvents } from 'agora-rtm-sdk'
 import type { UseWebRTCProps, UseWebRTCReturn } from '../types'
 
+const BACKEND_URL = import.meta.env['VITE_BACKEND_URL'] as string
+
+async function fetchRtmToken(uid: string): Promise<string> {
+  const res = await fetch(
+    `${BACKEND_URL}/api/agora/rtm-token?uid=${encodeURIComponent(uid)}`
+  )
+  if (!res.ok) throw new Error('Failed to fetch RTM token')
+  const data = await res.json() as { token: string }
+  return data.token
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Agora RTM SDK v2.x — API is completely different from v1.x
 //
@@ -229,8 +240,7 @@ export function useWebRTC({
         client.addEventListener('presence', handlePresence)
 
         // 4. Login — no uid in login() for v2 (it's in the constructor)
-        const res = await fetch('http://localhost:8080/agora/rtm-token?uid=' + uid)
-        const { token } = await res.json()
+        const token = await fetchRtmToken(uid)
         await client.login({ token })
 
         await new Promise(r => setTimeout(r, 500))

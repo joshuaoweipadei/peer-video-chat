@@ -7,6 +7,16 @@ import type {
   TrailMap,
 } from '../types'
 
+interface CanvasRenderingContext2DWithRoundRect extends CanvasRenderingContext2D {
+  roundRect(
+    x:       number,
+    y:       number,
+    width:   number,
+    height:  number,
+    radii?:  number | number[] | DOMPointInit | (number | DOMPointInit)[],
+  ): void
+}
+
 // ─── Detection class catalogue ────────────────────────────────────────────────
 export const DETECTION_CLASSES: readonly DetectionClass[] = [
   { name: 'person',  color: '#00e5a0' },
@@ -252,12 +262,11 @@ export function useCanvasOverlay({
 
         ctx.fillStyle = color
         ctx.beginPath()
-        if ('roundRect' in ctx) {
-          (ctx as CanvasRenderingContext2D & {
-            roundRect(x: number, y: number, w: number, h: number, r: number[]): void
-          }).roundRect(x, y - barH, tw + pad * 2, barH, [3, 3, 0, 0])
+        const ctx2d = ctx as CanvasRenderingContext2DWithRoundRect
+        if (typeof ctx2d.roundRect === 'function') {
+          ctx2d.roundRect(x, y - barH, tw + pad * 2, barH, [3, 3, 0, 0])
         } else {
-          // ctx.rect(x, y - barH, tw + pad * 2, barH)
+          ctx.rect(x, y - barH, tw + pad * 2, barH)
         }
         ctx.fill()
 
