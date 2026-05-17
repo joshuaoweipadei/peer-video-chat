@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { RtmTokenBuilder, RtmRole } from 'agora-access-token'
+import { RtmTokenBuilder } from 'agora-token'
 
 const router = Router()
 
@@ -59,7 +59,6 @@ router.get('/rtm-token', (req: Request, res: Response): void => {
     APP_ID,
     APP_CERTIFICATE,
     uid,
-    RtmRole.Rtm_User,
     expiresAt,
   )
 
