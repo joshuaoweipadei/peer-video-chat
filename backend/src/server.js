@@ -105,7 +105,7 @@ if (process.env["NODE_ENV"] !== "production") {
 }
 
 // Vercel serverless export
-export default app;
+// export default app;
 
 // import express, { Request, Response, NextFunction } from 'express'
 // import cors from 'cors'
