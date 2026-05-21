@@ -24,7 +24,6 @@ class PeerService {
   public onIceCandidate: ((candidate: RTCIceCandidate) => void) | null = null;
   private _makingOffer = false;
   private _ignoreOffer = false;
-  private _tracksAdded = false;
 
   constructor() {
     this.init();
@@ -48,7 +47,6 @@ class PeerService {
     }
     this._makingOffer = false;
     this._ignoreOffer = false;
-    this._tracksAdded = false;
     this.init();
   }
 
@@ -59,19 +57,13 @@ class PeerService {
     return this._ignoreOffer;
   }
 
-  addTracks(stream: MediaStream): void {
-    if (!this.peer || this._tracksAdded) return;
-    for (const track of stream.getTracks()) {
-      this.peer.addTrack(track, stream);
-    }
-    this._tracksAdded = true;
-  }
-
   async getOffer(): Promise<RTCSessionDescriptionInit | undefined> {
     if (!this.peer) return;
     try {
       this._makingOffer = true;
-      await this.peer.setLocalDescription(); // ← let browser create the offer
+      const offer = await this.peer.createOffer();
+      if (this.peer.signalingState !== 'stable') return;
+      await this.peer.setLocalDescription(offer);
       return this.peer.localDescription ?? undefined;
     } finally {
       this._makingOffer = false;
@@ -94,7 +86,8 @@ class PeerService {
     }
 
     await this.peer.setRemoteDescription(offer);
-    await this.peer.setLocalDescription(); // ← let browser create the answer
+    const ans = await this.peer.createAnswer();
+    await this.peer.setLocalDescription(ans);
     return this.peer.localDescription ?? undefined;
   }
 

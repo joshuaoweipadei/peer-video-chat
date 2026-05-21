@@ -50,6 +50,21 @@ export function useWebRTC() {
     return stream;
   }, []);
 
+  // ── Add tracks BEFORE creating offer ─────────────────────────────────────
+  // This is the critical fix — tracks must be added before getOffer()
+  // so the browser includes them in the SDP from the start
+
+  const addTracks = useCallback((stream: MediaStream) => {
+    if (!peer.peer) return;
+    const senders = peer.peer.getSenders();
+    for (const track of stream.getTracks()) {
+      const alreadySending = senders.some((s) => s.track?.id === track.id);
+      if (!alreadySending) {
+        peer.peer.addTrack(track, stream);
+      }
+    }
+  }, []);
+
   // ── Trickle ICE ───────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -102,9 +117,15 @@ export function useWebRTC() {
     isPolite.current = false;
 
     const stream = await getMedia();
-    peer.addTracks(stream); // ← adds tracks once, triggers negotiationneeded
-    // negotiationneeded fires → handleNegoNeeded → emits offer automatically
-  }, [getMedia]);
+
+    // Add tracks FIRST — this triggers negotiationneeded automatically
+    addTracks(stream);
+
+    // negotiationneeded will fire and call handleNegoNeeded which emits the offer
+    // But we also send an explicit offer to initiate
+    const offer = await peer.getOffer();
+    if (offer) socket.emit('start-call', { to, offer });
+  }, [socket, getMedia, addTracks]);
 
   // ── Incoming call (we are the callee = polite peer) ───────────────────────
 
@@ -116,12 +137,14 @@ export function useWebRTC() {
       isPolite.current = true;
 
       const stream = await getMedia();
-      peer.addTracks(stream); // ← adds tracks once before answering
+
+      // Add tracks before answering so they're in our answer SDP
+      addTracks(stream);
 
       const ans = await peer.getAnswer(offer, isPolite.current);
       if (ans) socket.emit('answer', { to: from, ans });
     },
-    [socket, getMedia],
+    [socket, getMedia, addTracks],
   );
 
   // ── Call accepted ─────────────────────────────────────────────────────────
