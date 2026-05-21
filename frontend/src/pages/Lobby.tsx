@@ -1,37 +1,36 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 // Room ID validation: 3–32 chars, alphanumeric + hyphen + underscore
-const ROOM_ID_REGEX = /^[a-zA-Z0-9_-]{3,32}$/
+const ROOM_ID_REGEX = /^[a-zA-Z0-9_-]{3,32}$/;
 
 const Lobby = () => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
-  const [room,  setRoom]  = useState<string>('')
-  const [error, setError] = useState<string>('')
+  const [room, setRoom] = useState<string>('');
+  const [error, setError] = useState<string>('');
 
   const handleJoin = (e: React.SyntheticEvent<HTMLFormElement>): void => {
-    e.preventDefault()
-    const id = room.trim()
+    e.preventDefault();
+    const id = room.trim();
     if (!id) {
-      setError('Enter a room ID to join.')
-      return
+      setError('Enter a room ID to join.');
+      return;
     }
     if (!ROOM_ID_REGEX.test(id)) {
-      setError('3–32 characters — letters, numbers, - or _ only.')
-      return
+      setError('3–32 characters — letters, numbers, - or _ only.');
+      return;
     }
-    void navigate(`/room/${encodeURIComponent(id)}`)
-  }
+    void navigate(`/room/${encodeURIComponent(id)}`);
+  };
 
   const generate = (): void => {
-    setRoom(Math.random().toString(36).slice(2, 10).toUpperCase())
-    setError('')
-  }
+    setRoom(Math.random().toString(36).slice(2, 10).toUpperCase());
+    setError('');
+  };
 
   return (
     <main className="min-h-screen bg-cv-bg flex items-center justify-center px-4">
-
       {/* Background grid texture */}
       <div
         className="fixed inset-0 opacity-[0.04] pointer-events-none"
@@ -47,7 +46,6 @@ const Lobby = () => {
 
       <div className="relative w-full max-w-md animate-fadein">
         <div className="bg-cv-surface border border-white/[0.07] rounded-2xl overflow-hidden shadow-2xl">
-
           {/* Header */}
           <header className="bg-cv-card px-8 pt-8 pb-6 text-center border-b border-white/[0.07]">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-cv-accent/10 border border-cv-accent/30 mb-4">
@@ -60,7 +58,11 @@ const Lobby = () => {
                 strokeWidth={2}
                 aria-hidden="true"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"
+                />
               </svg>
             </div>
             <h1 className="font-display text-2xl font-bold text-cv-text tracking-tight">
@@ -73,7 +75,11 @@ const Lobby = () => {
 
           {/* Form */}
           <div className="px-8 py-7">
-            <form onSubmit={handleJoin} noValidate aria-label="Join a video room">
+            <form
+              onSubmit={handleJoin}
+              noValidate
+              aria-label="Join a video room"
+            >
               <label
                 htmlFor="room-id"
                 className="block text-[11px] text-cv-muted uppercase tracking-widest mb-2"
@@ -85,8 +91,8 @@ const Lobby = () => {
                 type="text"
                 value={room}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  setRoom(e.target.value)
-                  setError('')
+                  setRoom(e.target.value);
+                  setError('');
                 }}
                 placeholder="Enter or generate a room ID"
                 maxLength={32}
@@ -97,10 +103,11 @@ const Lobby = () => {
                 className={`w-full bg-cv-card text-cv-text placeholder-cv-muted rounded-lg
                   px-4 py-3 text-[13px] font-mono border transition-all outline-none
                   focus:ring-2 focus:ring-cv-accent
-                  ${error
-                  ? 'border-cv-danger ring-1 ring-cv-danger'
-                  : 'border-white/[0.07]'
-                }`}
+                  ${
+                    error
+                      ? 'border-cv-danger ring-1 ring-cv-danger'
+                      : 'border-white/[0.07]'
+                  }`}
               />
               {error && (
                 <p
@@ -141,7 +148,9 @@ const Lobby = () => {
 
         {/* Feature pills */}
         <div className="flex justify-center gap-2 mt-4 flex-wrap">
-          {(['WebRTC P2P', 'Canvas Overlay', 'Tracking IDs', '30fps'] as const).map((f) => (
+          {(
+            ['WebRTC P2P', 'Canvas Overlay', 'Tracking IDs', '30fps'] as const
+          ).map((f) => (
             <span
               key={f}
               className="text-[10px] font-mono text-cv-muted border border-white/[0.07] rounded-full px-3 py-1"
@@ -152,6 +161,6 @@ const Lobby = () => {
         </div>
       </div>
     </main>
-  )
-}
-export default Lobby
+  );
+};
+export default Lobby;

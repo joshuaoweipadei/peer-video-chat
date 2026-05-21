@@ -4,11 +4,10 @@ Built a React video chat app using WebRTC
 
 To Start:
 
-Frontend: 
-.env.local file 
+Frontend:
+.env.local file
 
 -- VITE_AGORA_APP_ID:app_id
-
 
 Backend:
 .evn file:

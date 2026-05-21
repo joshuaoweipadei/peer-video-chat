@@ -1,53 +1,54 @@
-import { useRef, useState, useCallback, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
-import { useWebRTC }        from '../hooks/useWebRTC'
-import { useCanvasOverlay } from '../hooks/useCanvasOverlay'
-import VideoCanvas          from '../components/VideoCanvas'
-import Controls             from '../components/Controls'
-import OverlayPanel         from '../components/OverlayPanel'
-import type { OverlayOptions } from '../types'
+import { useWebRTC } from '../hooks/useWebRTC';
+import { useCanvasOverlay } from '../hooks/useCanvasOverlay';
+import VideoCanvas from '../components/VideoCanvas';
+import Controls from '../components/Controls';
+import OverlayPanel from '../components/OverlayPanel';
+import type { OverlayOptions } from '../types';
 
 // ── Default overlay configuration ─────────────────────────────────────────────
 const DEFAULT_OVERLAY: OverlayOptions = {
-  enabled:    true,
-  showBoxes:  true,
-  showIds:    true,
-  showConf:   true,
-  showLabel:  true,
-  showTrail:  false,
-  threshold:  40,
-  spawnRate:  3,
+  enabled: true,
+  showBoxes: true,
+  showIds: true,
+  showConf: true,
+  showLabel: true,
+  showTrail: false,
+  threshold: 40,
+  spawnRate: 3,
   maxObjects: 10,
-}
+};
 
 // ── PiP overlay config — fewer objects, slower spawn ─────────────────────────
 const PIP_OVERLAY_OVERRIDES: Partial<OverlayOptions> = {
-  spawnRate:  1,
+  spawnRate: 1,
   maxObjects: 3,
-}
+};
 
 const Room = () => {
-  const { roomId } = useParams<{ roomId: string }>()
-  const navigate   = useNavigate()
+  const { roomId } = useParams<{ roomId: string }>();
+  const navigate = useNavigate();
 
   // Guard: roomId must be defined (route param)
   if (!roomId) {
-    void navigate('/lobby')
-    return <></>
+    void navigate('/lobby');
+    return <></>;
   }
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
-  const remoteVideoRef  = useRef<HTMLVideoElement>(null)
-  const localVideoRef   = useRef<HTMLVideoElement>(null)
-  const remoteCanvasRef = useRef<HTMLCanvasElement>(null)
-  const localCanvasRef  = useRef<HTMLCanvasElement>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteCanvasRef = useRef<HTMLCanvasElement>(null);
+  const localCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [overlayOptions, setOverlayOptions] = useState<OverlayOptions>(DEFAULT_OVERLAY)
-  const [sidebarOpen,    setSidebarOpen]    = useState<boolean>(true)
-  const [totalSeen,      setTotalSeen]      = useState<number>(0)
-  const [clock,          setClock]          = useState<string>('')
+  const [overlayOptions, setOverlayOptions] =
+    useState<OverlayOptions>(DEFAULT_OVERLAY);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [totalSeen, setTotalSeen] = useState<number>(0);
+  const [clock, setClock] = useState<string>('');
 
   // ── WebRTC hook ────────────────────────────────────────────────────────────
   const {
@@ -59,68 +60,67 @@ const Room = () => {
     toggleCamera,
     toggleMic,
     leaveRoom,
-  } = useWebRTC({ roomId, localVideoRef, remoteVideoRef })
+  } = useWebRTC({ roomId, localVideoRef, remoteVideoRef });
 
   // ── Canvas overlay — remote (full-screen) ─────────────────────────────────
   const { getSnapshot: getRemoteSnapshot, detectionsRef: remoteDetRef } =
     useCanvasOverlay({
       canvasRef: remoteCanvasRef,
-      videoRef:  remoteVideoRef,
-      options:   overlayOptions,
-    })
+      videoRef: remoteVideoRef,
+      options: overlayOptions,
+    });
 
   // ── Canvas overlay — local PiP ────────────────────────────────────────────
-  const { detectionsRef: localDetRef } =
-    useCanvasOverlay({
-      canvasRef: localCanvasRef,
-      videoRef:  localVideoRef,
-      options:   { ...overlayOptions, ...PIP_OVERLAY_OVERRIDES },
-    })
+  const { detectionsRef: localDetRef } = useCanvasOverlay({
+    canvasRef: localCanvasRef,
+    videoRef: localVideoRef,
+    options: { ...overlayOptions, ...PIP_OVERLAY_OVERRIDES },
+  });
 
   // ── Track total objects seen across both canvases ─────────────────────────
   useEffect(() => {
     const id = setInterval(() => {
-      const remote = remoteDetRef.current.length
-      const local  = localDetRef.current.length
-      setTotalSeen((prev) => Math.max(prev, remote + local))
-    }, 1000)
-    return () => clearInterval(id)
-  }, [remoteDetRef, localDetRef])
+      const remote = remoteDetRef.current.length;
+      const local = localDetRef.current.length;
+      setTotalSeen((prev) => Math.max(prev, remote + local));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [remoteDetRef, localDetRef]);
 
   // ── HUD clock ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const tick = (): void => {
-      const d = new Date()
-      const pad = (n: number): string => String(n).padStart(2, '0')
-      setClock(`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`)
-    }
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [])
+      const d = new Date();
+      const pad = (n: number): string => String(n).padStart(2, '0');
+      setClock(
+        `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+      );
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // ── Leave call ─────────────────────────────────────────────────────────────
   const handleLeave = useCallback(async (): Promise<void> => {
-    await leaveRoom()
-    void navigate('/lobby')
-  }, [leaveRoom, navigate])
+    await leaveRoom();
+    void navigate('/lobby');
+  }, [leaveRoom, navigate]);
 
   // ── Overlay toggle ─────────────────────────────────────────────────────────
   const handleToggleOverlay = useCallback((): void => {
-    setOverlayOptions((o) => ({ ...o, enabled: !o.enabled }))
-  }, [])
+    setOverlayOptions((o) => ({ ...o, enabled: !o.enabled }));
+  }, []);
 
   // ── Sidebar toggle ─────────────────────────────────────────────────────────
   const handleToggleSidebar = useCallback((): void => {
-    setSidebarOpen((o) => !o)
-  }, [])
+    setSidebarOpen((o) => !o);
+  }, []);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-cv-bg">
-
       {/* ── Main video area ── */}
       <div className="relative flex-1 min-w-0">
-
         {/* Remote full-screen video + canvas */}
         <VideoCanvas
           videoRef={remoteVideoRef}
@@ -137,7 +137,8 @@ const Room = () => {
             className="absolute inset-0 flex flex-col items-center justify-center z-20"
             aria-live="polite"
             style={{
-              background: 'repeating-linear-gradient(45deg,#09090c 0,#09090c 12px,#0c0d10 12px,#0c0d10 24px)',
+              background:
+                'repeating-linear-gradient(45deg,#09090c 0,#09090c 12px,#0c0d10 12px,#0c0d10 24px)',
             }}
           >
             <div className="relative flex items-center justify-center mb-6">
@@ -155,7 +156,11 @@ const Room = () => {
                   strokeWidth={1.5}
                   aria-hidden="true"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"
+                  />
                 </svg>
               </span>
             </div>
@@ -229,14 +234,14 @@ const Room = () => {
           <div>
             <span
               className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${
-                isConnected
-                  ? 'bg-cv-accent animate-ping-slow'
-                  : 'bg-cv-amber'
+                isConnected ? 'bg-cv-accent animate-ping-slow' : 'bg-cv-amber'
               }`}
               aria-hidden="true"
             />
             {remoteJoined
-              ? isConnected ? 'CONNECTED' : 'HANDSHAKING'
+              ? isConnected
+                ? 'CONNECTED'
+                : 'HANDSHAKING'
               : 'STANDBY'}
           </div>
         </div>
@@ -260,7 +265,11 @@ const Room = () => {
             strokeWidth={2}
             aria-hidden="true"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
         </button>
 
@@ -289,6 +298,6 @@ const Room = () => {
         </div>
       )}
     </div>
-  )
-}
-export default Room
+  );
+};
+export default Room;
