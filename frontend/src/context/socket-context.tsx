@@ -3,7 +3,7 @@
 import { createContext, useMemo, useContext, type ReactNode } from 'react';
 import { type Socket, io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:8000';
+const SOCKET_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000';
 
 const SocketContext = createContext<Socket | null>(null);
 
