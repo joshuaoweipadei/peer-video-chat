@@ -97,10 +97,15 @@ io.on("connection", (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 8000;
-server.listen(PORT, () => {
-  console.log(`\n🚀 PeerChat server running on http://localhost:${PORT}\n`);
-});
+if (process.env["NODE_ENV"] !== "production") {
+  const PORT = process.env.PORT || 8000;
+  server.listen(PORT, () => {
+    console.log(`\n🚀 PeerChat server running on http://localhost:${PORT}\n`);
+  });
+}
+
+// // Vercel serverless export
+// export default app;
 
 // import express, { Request, Response, NextFunction } from 'express'
 // import cors from 'cors'
