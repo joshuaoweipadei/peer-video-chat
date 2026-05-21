@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSocket } from '@/context/socket-context';
-import PeerService from '@/services/peer.service';
+import peer from '@/services/peer.service';
 import type {
   UserJoinedPayload,
   OfferPayload,
@@ -19,146 +19,174 @@ export function useWebRTC() {
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
-  const isInitiator = useRef(false);
 
-  // ── Media helpers ────────────────────────────────────────────────────────
+  // true = we initiated the call (impolite peer in perfect negotiation)
+  const isPolite = useRef(false);
+  const remoteSocketIdRef = useRef<string | null>(null);
+
+  // Keep ref in sync so callbacks always have latest value
+  useEffect(() => {
+    remoteSocketIdRef.current = remoteSocketId;
+  }, [remoteSocketId]);
+
+  // ── Get user media ────────────────────────────────────────────────────────
 
   const getMedia = useCallback(async (): Promise<MediaStream> => {
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        sampleRate: 48000,
+      },
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 },
+      },
     });
     setMyStream(stream);
+    setIsAudioEnabled(true);
+    setIsVideoEnabled(true);
     return stream;
   }, []);
 
-  const sendStreams = useCallback(
-    (stream?: MediaStream) => {
-      const s = stream ?? myStream;
-      if (!s || !PeerService.peer) return;
-      // Avoid duplicate senders
-      const senders = PeerService.peer.getSenders();
-      for (const track of s.getTracks()) {
-        const alreadySending = senders.some((sender) => sender.track === track);
-        if (!alreadySending) PeerService.peer.addTrack(track, s);
-      }
-    },
-    [myStream],
-  );
+  // ── Add tracks BEFORE creating offer ─────────────────────────────────────
+  // This is the critical fix — tracks must be added before getOffer()
+  // so the browser includes them in the SDP from the start
 
-  // ── Trickle ICE ─────────────────────────────────────────────────────────
+  const addTracks = useCallback((stream: MediaStream) => {
+    if (!peer.peer) return;
+    const senders = peer.peer.getSenders();
+    for (const track of stream.getTracks()) {
+      const alreadySending = senders.some((s) => s.track?.id === track.id);
+      if (!alreadySending) {
+        peer.peer.addTrack(track, stream);
+      }
+    }
+  }, []);
+
+  // ── Trickle ICE ───────────────────────────────────────────────────────────
 
   useEffect(() => {
-    PeerService.onIceCandidate = (candidate) => {
-      if (remoteSocketId) {
-        socket.emit('ice-candidate', { to: remoteSocketId, candidate });
-      }
+    peer.onIceCandidate = (candidate) => {
+      const to = remoteSocketIdRef.current;
+      if (to) socket.emit('ice-candidate', { to, candidate });
     };
-  }, [remoteSocketId, socket]);
+  }, [socket]);
 
-  // ── Incoming ICE candidates ──────────────────────────────────────────────
+  // ── Remote track ──────────────────────────────────────────────────────────
 
-  const handleIceCandidate = useCallback(
-    async ({ candidate }: IceCandidatePayload) => {
-      await PeerService.addIceCandidate(candidate);
-    },
-    [],
-  );
+  useEffect(() => {
+    if (!peer.peer) return;
+    const onTrack = (ev: RTCTrackEvent) => {
+      setRemoteStream(ev.streams[0]);
+      setStatus('connected');
+    };
+    peer.peer.addEventListener('track', onTrack);
+    return () => peer.peer?.removeEventListener('track', onTrack);
+  }, []);
 
-  // ── User joined ──────────────────────────────────────────────────────────
+  // ── Negotiation needed ────────────────────────────────────────────────────
+
+  const handleNegoNeeded = useCallback(async () => {
+    const to = remoteSocketIdRef.current;
+    if (!to) return;
+    const offer = await peer.getOffer();
+    if (offer) socket.emit('peer-nego-needed', { offer, to });
+  }, [socket]);
+
+  useEffect(() => {
+    if (!peer.peer) return;
+    peer.peer.addEventListener('negotiationneeded', handleNegoNeeded);
+    return () =>
+      peer.peer?.removeEventListener('negotiationneeded', handleNegoNeeded);
+  }, [handleNegoNeeded]);
+
+  // ── User joined ───────────────────────────────────────────────────────────
 
   const handleUserJoined = useCallback(({ id }: UserJoinedPayload) => {
     setRemoteSocketId(id);
     setStatus('connecting');
   }, []);
 
-  // ── Initiate call ────────────────────────────────────────────────────────
+  // ── Start call (we are the caller = impolite peer) ────────────────────────
 
   const startCall = useCallback(async () => {
-    if (!remoteSocketId) return;
-    isInitiator.current = true;
-    const stream = await getMedia();
-    const offer = await PeerService.getOffer();
-    if (offer) socket.emit('start-call', { to: remoteSocketId, offer });
-    sendStreams(stream);
-  }, [remoteSocketId, socket, getMedia, sendStreams]);
+    const to = remoteSocketIdRef.current;
+    if (!to) return;
+    isPolite.current = false;
 
-  // ── Receive offer ────────────────────────────────────────────────────────
+    const stream = await getMedia();
+
+    // Add tracks FIRST — this triggers negotiationneeded automatically
+    addTracks(stream);
+
+    // negotiationneeded will fire and call handleNegoNeeded which emits the offer
+    // But we also send an explicit offer to initiate
+    const offer = await peer.getOffer();
+    if (offer) socket.emit('start-call', { to, offer });
+  }, [socket, getMedia, addTracks]);
+
+  // ── Incoming call (we are the callee = polite peer) ───────────────────────
 
   const handleIncomingCall = useCallback(
     async ({ from, offer }: OfferPayload) => {
       setRemoteSocketId(from);
+      remoteSocketIdRef.current = from;
       setStatus('connecting');
-      isInitiator.current = false;
+      isPolite.current = true;
+
       const stream = await getMedia();
-      const ans = await PeerService.getAnswer(offer);
+
+      // Add tracks before answering so they're in our answer SDP
+      addTracks(stream);
+
+      const ans = await peer.getAnswer(offer, isPolite.current);
       if (ans) socket.emit('answer', { to: from, ans });
-      sendStreams(stream);
     },
-    [socket, getMedia, sendStreams],
+    [socket, getMedia, addTracks],
   );
 
-  // ── Call accepted ────────────────────────────────────────────────────────
+  // ── Call accepted ─────────────────────────────────────────────────────────
 
   const handleCallAccepted = useCallback(async ({ ans }: AnswerPayload) => {
-    await PeerService.setRemoteDescription(ans); // guard is inside setRemoteDescription
+    await peer.setRemoteDescription(ans);
     setStatus('connected');
   }, []);
 
-  // ── Negotiation ──────────────────────────────────────────────────────────
-
-  const handleNegoNeeded = useCallback(async () => {
-    // Block if already mid-negotiation
-    if (PeerService.isNegotiating()) return;
-    const offer = await PeerService.getOffer();
-    if (remoteSocketId && offer) {
-      socket.emit('peer-nego-needed', { offer, to: remoteSocketId });
-    }
-  }, [remoteSocketId, socket]);
-
-  useEffect(() => {
-    if (!PeerService.peer) return;
-    PeerService.peer.addEventListener('negotiationneeded', handleNegoNeeded);
-    return () =>
-      PeerService.peer?.removeEventListener(
-        'negotiationneeded',
-        handleNegoNeeded,
-      );
-  }, [handleNegoNeeded]);
+  // ── Re-negotiation ────────────────────────────────────────────────────────
 
   const handleNegoIncoming = useCallback(
     async ({ from, offer }: NegoPayload) => {
-      const ans = await PeerService.getAnswer(offer);
+      const ans = await peer.getAnswer(offer, isPolite.current);
       if (ans) socket.emit('peer-nego-done', { to: from, ans });
     },
     [socket],
   );
 
   const handleNegoFinal = useCallback(async ({ ans }: NegoFinalPayload) => {
-    await PeerService.setRemoteDescription(ans); // same guard
+    await peer.setRemoteDescription(ans);
   }, []);
 
-  // ── Remote track ─────────────────────────────────────────────────────────
+  // ── ICE candidates ────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    if (!PeerService.peer) return;
-    const onTrack = (ev: RTCTrackEvent) => {
-      setRemoteStream(ev.streams[0]);
-      setStatus('connected');
-    };
-    PeerService.peer.addEventListener('track', onTrack);
-    return () => PeerService.peer?.removeEventListener('track', onTrack);
-  }, []);
+  const handleIceCandidate = useCallback(
+    async ({ candidate }: IceCandidatePayload) => {
+      await peer.addIceCandidate(candidate);
+    },
+    [],
+  );
 
-  // ── Peer disconnected ────────────────────────────────────────────────────
+  // ── Peer disconnected ─────────────────────────────────────────────────────
 
   const handlePeerDisconnected = useCallback(() => {
     setRemoteSocketId(null);
+    remoteSocketIdRef.current = null;
     setRemoteStream(null);
     setStatus('disconnected');
   }, []);
 
-  // ── Register socket events ───────────────────────────────────────────────
+  // ── Register all socket events ────────────────────────────────────────────
 
   useEffect(() => {
     socket.on('user-joined', handleUserJoined);
@@ -189,7 +217,7 @@ export function useWebRTC() {
     handlePeerDisconnected,
   ]);
 
-  // ── Media controls ───────────────────────────────────────────────────────
+  // ── Media controls ────────────────────────────────────────────────────────
 
   const toggleAudio = useCallback(() => {
     if (!myStream) return;
@@ -212,8 +240,9 @@ export function useWebRTC() {
     setMyStream(null);
     setRemoteStream(null);
     setRemoteSocketId(null);
+    remoteSocketIdRef.current = null;
     setStatus('idle');
-    PeerService.reset();
+    peer.reset();
   }, [myStream]);
 
   return {
@@ -224,7 +253,6 @@ export function useWebRTC() {
     isAudioEnabled,
     isVideoEnabled,
     startCall,
-    sendStreams,
     toggleAudio,
     toggleVideo,
     hangUp,

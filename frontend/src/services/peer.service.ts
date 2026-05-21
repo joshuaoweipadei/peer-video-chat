@@ -22,7 +22,8 @@ const ICE_SERVERS: RTCConfiguration = {
 class PeerService {
   public peer: RTCPeerConnection | null = null;
   public onIceCandidate: ((candidate: RTCIceCandidate) => void) | null = null;
-  private negotiating = false;
+  private _makingOffer = false;
+  private _ignoreOffer = false;
 
   constructor() {
     this.init();
@@ -44,49 +45,68 @@ class PeerService {
       this.peer.close();
       this.peer = null;
     }
-    this.negotiating = false;
+    this._makingOffer = false;
+    this._ignoreOffer = false;
     this.init();
   }
 
-  isNegotiating(): boolean {
-    return this.negotiating;
+  get makingOffer() {
+    return this._makingOffer;
+  }
+  get ignoreOffer() {
+    return this._ignoreOffer;
   }
 
   async getOffer(): Promise<RTCSessionDescriptionInit | undefined> {
     if (!this.peer) return;
-    if (this.negotiating) return; // ← block if already negotiating
-    this.negotiating = true;
-    const offer = await this.peer.createOffer();
-    await this.peer.setLocalDescription(new RTCSessionDescription(offer));
-    return offer;
+    try {
+      this._makingOffer = true;
+      const offer = await this.peer.createOffer();
+      if (this.peer.signalingState !== 'stable') return;
+      await this.peer.setLocalDescription(offer);
+      return this.peer.localDescription ?? undefined;
+    } finally {
+      this._makingOffer = false;
+    }
   }
 
   async getAnswer(
     offer: RTCSessionDescriptionInit,
+    isPolite: boolean,
   ): Promise<RTCSessionDescriptionInit | undefined> {
     if (!this.peer) return;
+
+    const offerCollision =
+      this.peer.signalingState !== 'stable' || this._makingOffer;
+
+    this._ignoreOffer = !isPolite && offerCollision;
+    if (this._ignoreOffer) {
+      console.warn('[peer] Ignoring colliding offer (impolite peer)');
+      return;
+    }
+
     await this.peer.setRemoteDescription(offer);
     const ans = await this.peer.createAnswer();
-    await this.peer.setLocalDescription(new RTCSessionDescription(ans));
-    return ans;
+    await this.peer.setLocalDescription(ans);
+    return this.peer.localDescription ?? undefined;
   }
 
   async setRemoteDescription(ans: RTCSessionDescriptionInit): Promise<void> {
     if (!this.peer) return;
     if (this.peer.signalingState !== 'have-local-offer') {
-      console.warn(
-        '[peer] Skipping setRemoteDescription — state:',
-        this.peer.signalingState,
-      );
+      console.warn('[peer] Skipping answer — state:', this.peer.signalingState);
       return;
     }
-    await this.peer.setRemoteDescription(new RTCSessionDescription(ans));
-    this.negotiating = false; // ← unlock after answer applied
+    await this.peer.setRemoteDescription(ans);
   }
 
   async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
     if (!this.peer) return;
-    await this.peer.addIceCandidate(new RTCIceCandidate(candidate));
+    try {
+      await this.peer.addIceCandidate(candidate);
+    } catch (e) {
+      if (!this._ignoreOffer) throw e;
+    }
   }
 }
 
