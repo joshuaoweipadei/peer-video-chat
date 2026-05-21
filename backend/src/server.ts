@@ -6,15 +6,19 @@ import cors from "cors";
 const app = express();
 const server = http.createServer(app);
 
+const FRONTEND_URL = (
+  process.env.FRONTEND_URL || "http://localhost:5173"
+).replace(/\/$/, "");
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: FRONTEND_URL,
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
 
-app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173" }));
+app.use(cors({ origin: FRONTEND_URL, credentials: true }));
 app.use(express.json());
 
 // Health check

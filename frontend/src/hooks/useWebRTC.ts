@@ -101,13 +101,15 @@ export function useWebRTC() {
   // ── Call accepted ────────────────────────────────────────────────────────
 
   const handleCallAccepted = useCallback(async ({ ans }: AnswerPayload) => {
-    await PeerService.setRemoteDescription(ans);
+    await PeerService.setRemoteDescription(ans); // guard is inside setRemoteDescription
     setStatus('connected');
   }, []);
 
   // ── Negotiation ──────────────────────────────────────────────────────────
 
   const handleNegoNeeded = useCallback(async () => {
+    // Block if already mid-negotiation
+    if (PeerService.isNegotiating()) return;
     const offer = await PeerService.getOffer();
     if (remoteSocketId && offer) {
       socket.emit('peer-nego-needed', { offer, to: remoteSocketId });
@@ -133,7 +135,7 @@ export function useWebRTC() {
   );
 
   const handleNegoFinal = useCallback(async ({ ans }: NegoFinalPayload) => {
-    await PeerService.setRemoteDescription(ans);
+    await PeerService.setRemoteDescription(ans); // same guard
   }, []);
 
   // ── Remote track ─────────────────────────────────────────────────────────

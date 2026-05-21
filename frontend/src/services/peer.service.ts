@@ -22,6 +22,7 @@ const ICE_SERVERS: RTCConfiguration = {
 class PeerService {
   public peer: RTCPeerConnection | null = null;
   public onIceCandidate: ((candidate: RTCIceCandidate) => void) | null = null;
+  private negotiating = false;
 
   constructor() {
     this.init();
@@ -37,18 +38,24 @@ class PeerService {
     };
   }
 
-  /** Tear down the existing connection and create a fresh one */
   reset(): void {
     if (this.peer) {
       this.peer.onicecandidate = null;
       this.peer.close();
       this.peer = null;
     }
+    this.negotiating = false;
     this.init();
+  }
+
+  isNegotiating(): boolean {
+    return this.negotiating;
   }
 
   async getOffer(): Promise<RTCSessionDescriptionInit | undefined> {
     if (!this.peer) return;
+    if (this.negotiating) return; // ← block if already negotiating
+    this.negotiating = true;
     const offer = await this.peer.createOffer();
     await this.peer.setLocalDescription(new RTCSessionDescription(offer));
     return offer;
@@ -66,7 +73,15 @@ class PeerService {
 
   async setRemoteDescription(ans: RTCSessionDescriptionInit): Promise<void> {
     if (!this.peer) return;
+    if (this.peer.signalingState !== 'have-local-offer') {
+      console.warn(
+        '[peer] Skipping setRemoteDescription — state:',
+        this.peer.signalingState,
+      );
+      return;
+    }
     await this.peer.setRemoteDescription(new RTCSessionDescription(ans));
+    this.negotiating = false; // ← unlock after answer applied
   }
 
   async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
