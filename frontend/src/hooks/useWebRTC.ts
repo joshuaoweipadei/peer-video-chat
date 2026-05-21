@@ -50,21 +50,6 @@ export function useWebRTC() {
     return stream;
   }, []);
 
-  // ── Add tracks BEFORE creating offer ─────────────────────────────────────
-  // This is the critical fix — tracks must be added before getOffer()
-  // so the browser includes them in the SDP from the start
-
-  const addTracks = useCallback((stream: MediaStream) => {
-    if (!peer.peer) return;
-    const senders = peer.peer.getSenders();
-    for (const track of stream.getTracks()) {
-      const alreadySending = senders.some((s) => s.track?.id === track.id);
-      if (!alreadySending) {
-        peer.peer.addTrack(track, stream);
-      }
-    }
-  }, []);
-
   // ── Trickle ICE ───────────────────────────────────────────────────────────
 
   useEffect(() => {
