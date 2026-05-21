@@ -117,15 +117,9 @@ export function useWebRTC() {
     isPolite.current = false;
 
     const stream = await getMedia();
-
-    // Add tracks FIRST — this triggers negotiationneeded automatically
-    addTracks(stream);
-
-    // negotiationneeded will fire and call handleNegoNeeded which emits the offer
-    // But we also send an explicit offer to initiate
-    const offer = await peer.getOffer();
-    if (offer) socket.emit('start-call', { to, offer });
-  }, [socket, getMedia, addTracks]);
+    peer.addTracks(stream); // ← adds tracks once, triggers negotiationneeded
+    // negotiationneeded fires → handleNegoNeeded → emits offer automatically
+  }, [getMedia]);
 
   // ── Incoming call (we are the callee = polite peer) ───────────────────────
 
@@ -137,14 +131,12 @@ export function useWebRTC() {
       isPolite.current = true;
 
       const stream = await getMedia();
-
-      // Add tracks before answering so they're in our answer SDP
-      addTracks(stream);
+      peer.addTracks(stream); // ← adds tracks once before answering
 
       const ans = await peer.getAnswer(offer, isPolite.current);
       if (ans) socket.emit('answer', { to: from, ans });
     },
-    [socket, getMedia, addTracks],
+    [socket, getMedia],
   );
 
   // ── Call accepted ─────────────────────────────────────────────────────────
